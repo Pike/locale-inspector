@@ -1,13 +1,17 @@
 import warnings
 
 from twisted.python import log
-from buildbot.process.buildstep import LoggingBuildStep, LoggedRemoteCommand
-from buildbot.status.builder import SUCCESS, WARNINGS, FAILURE, Results
+from twisted.internet import reactor
+from buildbot.process.buildstep import BuildStep, LoggingBuildStep, LoggedRemoteCommand
+from buildbot.status.builder import SUCCESS, WARNINGS, FAILURE, SKIPPED, \
+    Results
 from buildbot.steps.shell import WithProperties
 
 from pprint import pformat
 from collections import defaultdict
 import simplejson
+
+from bb2mbdb.utils import timeHelper
 
 class ResultRemoteCommand(LoggedRemoteCommand):
     """
@@ -21,9 +25,12 @@ class ResultRemoteCommand(LoggedRemoteCommand):
     def ensureDBRun(self):
         if self.dbrun is not None:
             return
-        from unchanged.models import Run, Build, Tree, Locale
+        from unchanged.models import Run, Build
+        from life.models import Tree, Forest, Locale
         loc, isnew = Locale.objects.get_or_create(code=self.args['locale'])
-        tree, isnew = Tree.objects.get_or_create(code=self.args['tree'])
+        forest = Forest.objects.get(name=self.step.build.getProperty('l10n_branch'))
+        tree, isnew = Tree.objects.get_or_create(code=self.args['tree'],
+                                                 l10n=forest)
         buildername = self.step.build.getProperty('buildername')
         buildnumber = self.step.build.getProperty('buildnumber')
         try:
@@ -51,6 +58,9 @@ class ResultRemoteCommand(LoggedRemoteCommand):
             except Changeset.DoesNotExist:
                 pass
         if revs:
+            self.dbrun.save()
+            latest_cs = self.dbrun.revisions.order_by('-push__push_date')[0]
+            self.dbrun.srctime = latest_cs.push.push_date
             self.dbrun.save()
 
     def remoteUpdate(self, update):
@@ -238,3 +248,36 @@ class InspectLocale(LoggingBuildStep):
         if False and cmd.missing > 0:
             text += ['missing: %d' % cmd.missing]
         return LoggingBuildStep.getText(self,cmd,results) + text
+
+
+class GetRevisions(BuildStep):
+    name = "moz_get_revs"
+    warnOnFailure = 1
+
+    description = ["get", "revisions"]
+    descriptionDone = ["got", "revisions"]
+
+    def start(self):
+        log.msg("setting build props for revisions")
+        changes = self.build.allChanges()
+        if not changes:
+            return SKIPPED
+        from life.models import Changeset
+        when = timeHelper(max(map(lambda c: c.when, changes)))
+        loog = self.addLog("stdio")
+        loog.addStdout("Timestamps for %s:\n\n" % when)
+        revs = self.build.getProperty('revisions')[:]
+        for rev in revs:
+            branch = self.build.getProperty('%s_branch' % rev)
+            if rev == 'l10n':
+                # l10n repo, append locale to branch
+                branch += '/' + self.build.getProperty('locale')
+            try:
+                q = Changeset.objects.filter(push__repository__name= branch,
+                                             push__push_date__lte=when)
+                to_set = str(q.order_by('-pk')[0].revision[:12])
+            except IndexError:
+                to_set = "default"
+            self.build.setProperty('%s_revision' % rev, to_set, 'Build')
+            loog.addStdout("%s: %s\n" % (branch, to_set))
+        reactor.callLater(0, self.finished, SUCCESS)
