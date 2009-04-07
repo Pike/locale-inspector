@@ -35,32 +35,59 @@ def createChangeSource(settings, pollInterval=30):
                 log.msg('mbdb changesource found %d pushes' % new_pushes.count())
             push = None
             for push in new_pushes:
-                repo = push.repository
-                if repo.forest is not None:
-                    branch = repo.forest.name.encode('utf-8')
-                    locale = repo.name[len(branch)+1:].encode('utf-8')
-                else:
-                    branch = repo.name.encode('utf-8')
-                for cs in push.changesets.order_by('pk'):
-                    c = changes.Change(who = push.user.encode('utf-8'),
-                                       files = map(lambda u: u.encode('utf-8'),
-                                                   cs.files.values_list('path', flat=True)),
-                                       revision = cs.revision.encode('utf-8'),
-                                       comments = cs.description.encode('utf-8'),
-                                       when = timegm(push.push_date.utctimetuple()),
-                                       branch = branch)
-                    if repo.forest is not None:
-                        # locale change
-                        c.locale = locale
-                    self.parent.addChange(c)
+                self.submitChangesForPush(push)
             if push is not None:
                 self.latest = push.id
-                    
+
+        def submitChangesForPush(self, push):
+            repo = push.repository
+            if repo.forest is not None:
+                branch = repo.forest.name.encode('utf-8')
+                locale = repo.name[len(branch) + 1:].encode('utf-8')
+            else:
+                branch = repo.name.encode('utf-8')
+            for cs in push.changesets.order_by('pk'):
+                c = changes.Change(who=push.user.encode('utf-8'),
+                                    files=map(lambda u: u.encode('utf-8'),
+                                    cs.files.values_list('path', flat=True)),
+                                    revision=cs.revision.encode('utf-8'),
+                                    comments=cs.description.encode('utf-8'),
+                                    when=timegm(push.push_date.utctimetuple()),
+                                    branch=branch)
+                if repo.forest is not None:
+                    # locale change
+                    c.locale = locale
+                self.parent.addChange(c)
+
+        def replay(self, builder, startPush=None, startTime=None, endTime=None):
+            bm = self.parent.parent.botmaster
+            qd = {}
+            if startTime is not None:
+                qd['push_date__gte'] = startTime
+            if endTime is not None:
+                qd['push_date__lte'] = endTime
+            if startPush is not None:
+                qd['id__gte'] = startPush
+            q = Push.objects.filter(**qd).order_by('push_date')
+            i = q.iterator()
+            def next(_cb):
+                try:
+                    p = i.next()
+                except StopIteration:
+                    return
+                self.submitChangesForPush(p)
+                def stumble():
+                    bm.waitUntilBuilderIdle(builder).addCallback(_cb, _cb)
+                reactor.callLater(.5, stumble)
+            def cb(res, _cb):
+                reactor.callLater(.5, next, _cb)
+            next(cb)
+
         def describe(self):
-            return "Getting changes from: %s" % self._make_url()
+            return str(self)
 
         def __str__(self):
-            return "<HgPoller for %s%s>" % (self.hgURL, self.branch)
+            return "MBDBChangeSource"
 
     c = MBDBChangeSource(pollInterval)
     return c
