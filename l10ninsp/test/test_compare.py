@@ -20,11 +20,11 @@ settings.INSTALLED_APPS = (
   'life',
   'mbdb',
   'bb2mbdb',
-  'unchanged',
+  'l10nstats',
 )
 settings.BUILDMASTER_BASE = 'basedir'
 
-from unchanged.models import Run, Tree, Locale, ModuleCount
+from l10nstats.models import Run, Tree, Locale, ModuleCount
 from django.test.utils import connection
 
 def createStage(basedir, *files):

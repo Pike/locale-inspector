@@ -25,7 +25,7 @@ class ResultRemoteCommand(LoggedRemoteCommand):
     def ensureDBRun(self):
         if self.dbrun is not None:
             return
-        from unchanged.models import Run, Build
+        from l10nstats.models import Run, Build
         from life.models import Tree, Forest, Locale
         loc, isnew = Locale.objects.get_or_create(code=self.args['locale'])
         forest = Forest.objects.get(name=self.step.build.getProperty('l10n_branch'))
@@ -131,7 +131,7 @@ class ResultRemoteCommand(LoggedRemoteCommand):
         modulestats = defaultdict(int)
         for m, f, c, id in rows:
             modulestats[m] += c
-        from unchanged.models import UnchangedInFile, ModuleCount
+        from l10nstats.models import UnchangedInFile, ModuleCount
         from django.db import connection
         cur = connection.cursor()
         cur.executemany("INSERT INTO %s ('module', 'file', 'count', 'run_id') VALUES (%%s, %%s, %%s,  %%s);"

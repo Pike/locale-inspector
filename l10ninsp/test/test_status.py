@@ -13,7 +13,7 @@ settings.INSTALLED_APPS = (
   'life',
   'mbdb',
   'bb2mbdb',
-  'unchanged',
+  'l10nstats',
 )
 settings.BUILDMASTER_BASE = 'basedir'
 
