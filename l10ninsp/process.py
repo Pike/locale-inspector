@@ -6,7 +6,7 @@ from twisted.python import log, failure
 
 import l10ninsp.steps
 reload(l10ninsp.steps)
-from steps import InspectLocale
+from steps import InspectLocale, GetRevisions
 
 
 class Factory(factory.BuildFactory):
@@ -40,6 +40,7 @@ class Factory(factory.BuildFactory):
             revs = revs[:]
         revs.remove('l10n')
         tree = request.properties.getProperty('tree')
+        preSteps = ((GetRevisions, {}),)
         sourceSteps = tuple(
             (ShellCommand, {'command': 
                             ['hg', 'update', '-r', 
@@ -50,9 +51,9 @@ class Factory(factory.BuildFactory):
             for mod in revs)
         idSteps = tuple(
             (SetProperty, {'command': 
-                           ['hg', 'ident', 
-                            WithProperties(self.base + 
-                                           '/%%(%s_branch)s' % mod)],
+                           ['hg', 'ident'], 
+                            'workdir': WithProperties(self.base + 
+                                                      '/%%(%s_branch)s' % mod),
                            'haltOnFailure': True,
                            'property': '%s_revision' % mod})
             for mod in revs)
@@ -64,9 +65,9 @@ class Factory(factory.BuildFactory):
                                                       '/%(l10n_branch)s/%(locale)s'),
                             'haltOnFailure': True}),
             (SetProperty, {'command': 
-                           ['hg', 'ident', 
-                            WithProperties(self.base + 
-                                           '/%(l10n_branch)s/%(locale)s')],
+                           ['hg', 'ident'], 
+                            'workdir': WithProperties(self.base + 
+                                                      '/%(l10n_branch)s/%(locale)s'),
                            'haltOnFailure': True,
                            'property': 'l10n_revision'}),
             )
@@ -82,4 +83,4 @@ class Factory(factory.BuildFactory):
                     'tree': tree,
                     'gather_stats': True,
                     }),)
-        return sourceSteps + idSteps + l10nSteps + inspectSteps
+        return preSteps + sourceSteps + idSteps + l10nSteps + inspectSteps
