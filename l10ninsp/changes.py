@@ -9,13 +9,15 @@ from buildbot.changes import base, changes
 
 def createChangeSource(settings, pollInterval=30):
     os.environ['DJANGO_SETTINGS_MODULE'] = settings
-    from pushes.models import Push
+    from pushes.models import Push, Branch
     class MBDBChangeSource(base.ChangeSource):
         debug = True
-        def __init__(self,  pollInterval=30):
+        def __init__(self,  pollInterval=30, branch='default'):
             #base.ChangeSource.__init__(self)
             self.pollInterval = pollInterval
             self.latest = None
+            self.branch, created = \
+                Branch.objects.get_or_create(name=branch)
         
         def startService(self):
             self.loop = LoopingCall(self.poll)
@@ -46,7 +48,7 @@ def createChangeSource(settings, pollInterval=30):
                 locale = repo.name[len(branch) + 1:].encode('utf-8')
             else:
                 branch = repo.name.encode('utf-8')
-            for cs in push.changesets.order_by('pk'):
+            for cs in push.changesets.filter(branch=self.branch).order_by('pk'):
                 c = changes.Change(who=push.user.encode('utf-8'),
                                     files=map(lambda u: u.encode('utf-8'),
                                     cs.files.values_list('path', flat=True)),
