@@ -56,6 +56,7 @@ class ResultRemoteCommand(LoggedRemoteCommand):
                                            revision__startswith=ident[:12])
                 self.dbrun.revisions.add(cs)
             except Changeset.DoesNotExist:
+                log.msg("no changeset found for %s=%s" % (rev, ident))
                 pass
         if revs:
             self.dbrun.save()
@@ -134,7 +135,7 @@ class ResultRemoteCommand(LoggedRemoteCommand):
         from l10nstats.models import UnchangedInFile, ModuleCount
         from django.db import connection
         cur = connection.cursor()
-        cur.executemany("INSERT INTO %s ('module', 'file', 'count', 'run_id') VALUES (%%s, %%s, %%s,  %%s);"
+        cur.executemany("INSERT INTO %s (module, file, count, run_id) VALUES (%%s, %%s, %%s,  %%s)"
                          % UnchangedInFile._meta.db_table, rows)
         log.msg("should have inserted %d rows into %s" %
                 (len(rows), UnchangedInFile._meta.db_table))
@@ -277,6 +278,7 @@ class GetRevisions(BuildStep):
                                              push__push_date__lte=when)
                 to_set = str(q.order_by('-pk')[0].revision[:12])
             except IndexError:
+                # no pushes, update to empty repo 000000000000
                 to_set = "default"
             self.build.setProperty('%s_revision' % rev, to_set, 'Build')
             loog.addStdout("%s: %s\n" % (branch, to_set))

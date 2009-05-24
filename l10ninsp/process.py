@@ -51,7 +51,7 @@ class Factory(factory.BuildFactory):
             for mod in revs)
         idSteps = tuple(
             (SetProperty, {'command': 
-                           ['hg', 'ident'], 
+                           ['hg', 'ident', '-i'], 
                             'workdir': WithProperties(self.base + 
                                                       '/%%(%s_branch)s' % mod),
                            'haltOnFailure': True,
@@ -65,7 +65,7 @@ class Factory(factory.BuildFactory):
                                                       '/%(l10n_branch)s/%(locale)s'),
                             'haltOnFailure': True}),
             (SetProperty, {'command': 
-                           ['hg', 'ident'], 
+                           ['hg', 'ident', '-i'], 
                             'workdir': WithProperties(self.base + 
                                                       '/%(l10n_branch)s/%(locale)s'),
                            'haltOnFailure': True,

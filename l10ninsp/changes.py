@@ -7,7 +7,7 @@ from twisted.internet.task import LoopingCall
 
 from buildbot.changes import base, changes
 
-def createChangeSource(settings, pollInterval=30):
+def createChangeSource(settings, pollInterval=3*60):
     os.environ['DJANGO_SETTINGS_MODULE'] = settings
     from pushes.models import Push, Branch
     class MBDBChangeSource(base.ChangeSource):
@@ -42,6 +42,8 @@ def createChangeSource(settings, pollInterval=30):
                 self.latest = push.id
 
         def submitChangesForPush(self, push):
+            if self.debug:
+                log.msg('submitChangesForPush called')
             repo = push.repository
             if repo.forest is not None:
                 branch = repo.forest.name.encode('utf-8')
@@ -72,10 +74,13 @@ def createChangeSource(settings, pollInterval=30):
                 qd['id__gte'] = startPush
             q = Push.objects.filter(**qd).order_by('push_date')
             i = q.iterator()
+            if self.debug:
+                log.msg('replay called for %d pushes' % q.count())
             def next(_cb):
                 try:
                     p = i.next()
                 except StopIteration:
+                    log.msg("done iterating")
                     return
                 self.submitChangesForPush(p)
                 def stumble():
