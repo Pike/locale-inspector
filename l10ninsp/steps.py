@@ -28,7 +28,10 @@ class ResultRemoteCommand(LoggedRemoteCommand):
         from l10nstats.models import Run, Build
         from life.models import Tree, Forest, Locale
         loc, isnew = Locale.objects.get_or_create(code=self.args['locale'])
-        forest = Forest.objects.get(name=self.step.build.getProperty('l10n_branch'))
+        forest, isnew = Forest.objects.get_or_create(name=self.step.build.getProperty('l10n_branch'))
+        if isnew:
+            log.msg(("WARNING: Forest %s created in status, not expected " +
+                     "outside of tests") % forest.name)
         tree, isnew = Tree.objects.get_or_create(code=self.args['tree'],
                                                  l10n=forest)
         buildername = self.step.build.getProperty('buildername')
@@ -52,7 +55,7 @@ class ResultRemoteCommand(LoggedRemoteCommand):
                 branch += '/' + loc.code
             ident = self.step.build.getProperty('%s_revision' % rev)
             try:
-                cs = Changeset.objects.get(push__repository__name=branch,
+                cs = Changeset.objects.get(repository__name=branch,
                                            revision__startswith=ident[:12])
                 self.dbrun.revisions.add(cs)
             except Changeset.DoesNotExist:
@@ -260,6 +263,7 @@ class GetRevisions(BuildStep):
 
     def start(self):
         log.msg("setting build props for revisions")
+        self.step_status.setText(self.description)
         changes = self.build.allChanges()
         if not changes:
             return SKIPPED
@@ -274,12 +278,16 @@ class GetRevisions(BuildStep):
                 # l10n repo, append locale to branch
                 branch += '/' + self.build.getProperty('locale')
             try:
-                q = Changeset.objects.filter(push__repository__name= branch,
+                q = Changeset.objects.filter(repository__name= branch,
                                              push__push_date__lte=when)
                 to_set = str(q.order_by('-pk')[0].revision[:12])
             except IndexError:
                 # no pushes, update to empty repo 000000000000
-                to_set = "default"
+                to_set = "000000000000"
             self.build.setProperty('%s_revision' % rev, to_set, 'Build')
             loog.addStdout("%s: %s\n" % (branch, to_set))
         reactor.callLater(0, self.finished, SUCCESS)
+
+    def finished(self, results):
+        self.step_status.setText(self.descriptionDone)
+        BuildStep.finished(self, results)

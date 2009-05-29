@@ -44,7 +44,7 @@ def createChangeSource(settings, pollInterval=3*60):
         def submitChangesForPush(self, push):
             if self.debug:
                 log.msg('submitChangesForPush called')
-            repo = push.repository
+            repo = push.tip.repository
             if repo.forest is not None:
                 branch = repo.forest.name.encode('utf-8')
                 locale = repo.name[len(branch) + 1:].encode('utf-8')

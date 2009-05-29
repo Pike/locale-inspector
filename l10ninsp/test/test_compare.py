@@ -168,7 +168,10 @@ f.addStep(InspectLocale, master='l10n-master', workdir='.', basedir='mozilla',
                          l10nbase='l10n', locale='missing', tree='app',
                          gather_stats=True)
 BuildmasterConfig = c = {}
-c['properties'] = {'revisions': []}
+c['properties'] = {
+  'revisions': [],
+  'l10n_branch': 'test'
+  }
 c['slaves'] = [BuildSlave('bot1', 'sekrit')]
 c['schedulers'] = []
 c['builders'] = []
