@@ -33,7 +33,7 @@ BuildmasterConfig = c = {}
 c['slaves'] = [BuildSlave('bot1', 'sekrit')]
 c['schedulers'] = []
 c['builders'] = []
-c['builders'].append({'name': 'dummy', 'slavename': 'bot1',
+c['builders'].append({'name': 'test_builder', 'slavename': 'bot1',
                       'builddir': 'dummy1', 'factory': f})
 c['slavePortnum'] = 0
 """
@@ -63,14 +63,14 @@ class DatabaseStatus(RunMixin, unittest.TestCase):
     m.loadConfig(config_2)
     m.readConfig = True
     m.startService()
-    d = self.connectSlave(builders=["dummy"])
+    d = self.connectSlave(builders=["test_builder"])
     d.addCallback(self._doBuild)
     return d
 
   def _doBuild(self, res):
     c = interfaces.IControl(self.master)
-    d = self.requestBuild("dummy")
-    d2 = self.master.botmaster.waitUntilBuilderIdle("dummy")
+    d = self.requestBuild("test_builder")
+    d2 = self.master.botmaster.waitUntilBuilderIdle("test_builder")
     dl = defer.DeferredList([d, d2])
     startedAround = datetime.utcnow()
     dl.addCallback(self._doneBuilding, startedAround)
@@ -80,12 +80,17 @@ class DatabaseStatus(RunMixin, unittest.TestCase):
     endedAround = datetime.utcnow()
     delta = timedelta(0, 1)
     self.assertEquals(Build.objects.count(), 1)
+    self.assertEquals(Builder.objects.count(), 1)
+    self.assertEquals(BuildRequest.objects.count(), 1)
+    self.assertEquals(Slave.objects.count(), 1)
+    self.assertEquals(Master.objects.count(), 1)
+    self.assertEquals(SourceStamp.objects.count(), 1)
     build = Build.objects.all()[0]
     self.assert_(abs(build.starttime-startedAround) < delta)
     self.assert_(abs(build.endtime-endedAround) < delta)
-    self.assertEquals(build.getProperty('buildername'), 'dummy')
+    self.assertEquals(build.getProperty('buildername'), 'test_builder')
     self.assertEquals(build.getProperty('slavename'), 'bot1')
     self.assertEquals(build.getProperty('buildnumber'), 0)
     self.assertEquals(build.reason, 'forced build')
-    self.assertEquals(build.changes.count(), 0)
+    self.assertEquals(build.sourcestamp.changes.count(), 0)
     pass

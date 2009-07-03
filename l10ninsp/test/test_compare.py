@@ -175,7 +175,7 @@ c['properties'] = {
 c['slaves'] = [BuildSlave('bot1', 'sekrit')]
 c['schedulers'] = []
 c['builders'] = []
-c['builders'].append({'name': 'inspect', 'slavename': 'bot1',
+c['builders'].append({'name': 'test_builder', 'slavename': 'bot1',
                       'builddir': '.', 'factory': f})
 c['slavePortnum'] = 0
 
@@ -200,15 +200,15 @@ class MasterSide(RunMixin, unittest.TestCase):
         m.loadConfig(config)
         m.readConfig = True
         m.startService()
-        d = self.connectSlave(builders=["inspect"])
+        d = self.connectSlave(builders=["test_builder"])
         d.addCallback(self._doBuild)
         return d
 
     def _doBuild(self, res):
         createStage('slavebase-bot1', *SlaveSide.stageFiles)
         c = interfaces.IControl(self.master)
-        d = self.requestBuild("inspect")
-        d2 = self.master.botmaster.waitUntilBuilderIdle("inspect")
+        d = self.requestBuild("test_builder")
+        d2 = self.master.botmaster.waitUntilBuilderIdle("test_builder")
         dl = defer.DeferredList([d, d2])
         dl.addCallback(self._doneBuilding)
         return dl
