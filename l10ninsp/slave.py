@@ -49,7 +49,6 @@ class InspectCommand(Command):
     self.workdir = args['workdir']
     self.basedir = args['basedir']
     self.gather_stats = args['gather_stats']
-    self.initial_module = args['initial_module']
     ## more
 
   def start(self):
@@ -73,8 +72,7 @@ class InspectCommand(Command):
       app = EnumerateSourceTreeApp(os.path.join(workingdir, self.inipath),
                                    workingdir,
                                    os.path.join(workingdir, self.l10nbase),
-                                   [self.locale],
-                                   initial_module=self.initial_module)
+                                   [self.locale])
       obs = None
       if self.gather_stats:
           obs = Observer()
