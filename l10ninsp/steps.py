@@ -46,25 +46,35 @@ class ResultRemoteCommand(LoggedRemoteCommand):
                                         tree = tree,
                                         build = build)
         self.dbrun.activate()
-        from pushes.models import Changeset
+        from pushes.models import Changeset, Push
         revs = self.step.build.getProperty('revisions')
+        srctime = None
         for rev in revs:
             branch = self.step.build.getProperty('%s_branch' % rev)
             if rev == 'l10n':
                 # l10n repo, append locale to branch
                 branch += '/' + loc.code
             ident = self.step.build.getProperty('%s_revision' % rev)
+            cs = None
             try:
-                cs = Changeset.objects.get(repository__name=branch,
-                                           revision__startswith=ident[:12])
+                cs = Changeset.objects.get(revision__startswith=ident[:12])
                 self.dbrun.revisions.add(cs)
             except Changeset.DoesNotExist:
                 log.msg("no changeset found for %s=%s" % (rev, ident))
                 pass
-        if revs:
-            self.dbrun.save()
-            latest_cs = self.dbrun.revisions.order_by('-push__push_date')[0]
-            self.dbrun.srctime = latest_cs.push.push_date
+            if cs is not None and cs.id is not 1:
+                try:
+                    _st = Push.objects.filter(repository__name=branch,
+                                              changesets=cs).order_by('push_date')[0].push_date
+                    if srctime is None:
+                        srctime = _st
+                    else:
+                        srctime = max(srctime, _st)
+                except (Push.DoesNotExist, IndexError):
+                    log.msg("no srctime found for %s=%s" % (rev, ident))
+                    pass
+        if srctime is not None:
+            self.dbrun.srctime = srctime
             self.dbrun.save()
 
     def remoteUpdate(self, update):
@@ -267,7 +277,7 @@ class GetRevisions(BuildStep):
         changes = self.build.allChanges()
         if not changes:
             return SKIPPED
-        from life.models import Changeset
+        from life.models import Push
         when = timeHelper(max(map(lambda c: c.when, changes)))
         loog = self.addLog("stdio")
         loog.addStdout("Timestamps for %s:\n\n" % when)
@@ -278,9 +288,9 @@ class GetRevisions(BuildStep):
                 # l10n repo, append locale to branch
                 branch += '/' + self.build.getProperty('locale')
             try:
-                q = Changeset.objects.filter(repository__name= branch,
-                                             push__push_date__lte=when)
-                to_set = str(q.order_by('-pk')[0].revision[:12])
+                q = Push.objects.filter(repository__name= branch,
+                                        push_date__lte=when)
+                to_set = str(q.order_by('-pk')[0].tip.shortrev)
             except IndexError:
                 # no pushes, update to empty repo 000000000000
                 to_set = "000000000000"

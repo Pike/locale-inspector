@@ -10,6 +10,7 @@ from buildbot.changes import base, changes
 def createChangeSource(settings, pollInterval=3*60):
     os.environ['DJANGO_SETTINGS_MODULE'] = settings
     from pushes.models import Push, Branch
+    from django.db import transaction
     class MBDBChangeSource(base.ChangeSource):
         debug = True
         def __init__(self,  pollInterval=30, branch='default'):
@@ -28,13 +29,21 @@ def createChangeSource(settings, pollInterval=3*60):
             self.loop.stop()
             return base.ChangeSource.stopService(self)
         
+        @transaction.commit_manually
         def poll(self):
+            '''Check for new pushes.
+
+            Hack around transactions on innodb, make this transaction
+            aware and transaction.commit() to get a new transaction
+            for our queries.
+            '''
+            transaction.commit()
             if self.latest is None:
                 self.latest = Push.objects.order_by('-pk')[0].id
                 return
             new_pushes = Push.objects.filter(pk__gt=self.latest).order_by('pk')
             if self.debug:
-                log.msg('mbdb changesource found %d pushes' % new_pushes.count())
+                log.msg('mbdb changesource found %d pushes after %d' % (new_pushes.count(), self.latest))
             push = None
             for push in new_pushes:
                 self.submitChangesForPush(push)
@@ -44,7 +53,7 @@ def createChangeSource(settings, pollInterval=3*60):
         def submitChangesForPush(self, push):
             if self.debug:
                 log.msg('submitChangesForPush called')
-            repo = push.tip.repository
+            repo = push.repository
             if repo.forest is not None:
                 branch = repo.forest.name.encode('utf-8')
                 locale = repo.name[len(branch) + 1:].encode('utf-8')
