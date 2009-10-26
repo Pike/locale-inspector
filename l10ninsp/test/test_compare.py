@@ -12,17 +12,16 @@ from buildbot.test.runutils import SlaveCommandTestBase, RunMixin
 from shutil import copytree
 import pdb
 
-from django.conf import settings, UserSettingsHolder, global_settings
+from django.conf import settings
 
-settings._target = UserSettingsHolder(global_settings)
-settings.DATABASE_ENGINE = 'sqlite3'
-settings.INSTALLED_APPS = (
-  'life',
-  'mbdb',
-  'bb2mbdb',
-  'l10nstats',
-)
-settings.BUILDMASTER_BASE = 'basedir'
+if not settings.configured:
+    settings.configure(DATABASE_ENGINE = 'sqlite3',
+                       INSTALLED_APPS = ('life',
+                                         'mbdb',
+                                         'bb2mbdb',
+                                         'l10nstats',
+                                         ),
+                       BUILDMASTER_BASE = 'basedir')
 
 from l10nstats.models import Run, Tree, Locale, ModuleCount
 from django.test.utils import connection

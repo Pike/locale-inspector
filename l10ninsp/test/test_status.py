@@ -6,17 +6,16 @@ from twisted.internet import defer
 from buildbot import interfaces
 from buildbot.test.runutils import RunMixin
 
-from django.conf import settings, UserSettingsHolder, global_settings
-settings._target = UserSettingsHolder(global_settings)
-settings.DATABASE_ENGINE = 'sqlite3'
-settings.INSTALLED_APPS = (
-  'life',
-  'mbdb',
-  'bb2mbdb',
-  'l10nstats',
-)
-settings.BUILDMASTER_BASE = 'basedir'
+from django.conf import settings
 
+if not settings.configured:
+  settings.configure(DATABASE_ENGINE = 'sqlite3',
+                     INSTALLED_APPS = ('life',
+                                       'mbdb',
+                                       'bb2mbdb',
+                                       'l10nstats',
+                                       ),
+                     BUILDMASTER_BASE = 'basedir')
 
 config = """
 from buildbot.process import factory
