@@ -270,6 +270,7 @@ class GetRevisions(BuildStep):
 
     description = ["get", "revisions"]
     descriptionDone = ["got", "revisions"]
+    hg_branch = 'default'
 
     def start(self):
         log.msg("setting build props for revisions")
@@ -288,8 +289,9 @@ class GetRevisions(BuildStep):
                 # l10n repo, append locale to branch
                 branch += '/' + self.build.getProperty('locale')
             try:
-                q = Push.objects.filter(repository__name= branch,
-                                        push_date__lte=when)
+                q = Push.objects.filter(repository__name=branch,
+                                        push_date__lte=when,
+                                        changesets__branch__name=self.hg_branch)
                 to_set = str(q.order_by('-pk')[0].tip.shortrev)
             except IndexError:
                 # no pushes, update to empty repo 000000000000
