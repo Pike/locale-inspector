@@ -39,7 +39,10 @@ def createChangeSource(settings, pollInterval=3*60):
             '''
             transaction.commit()
             if self.latest is None:
-                self.latest = Push.objects.order_by('-pk')[0].id
+                try:
+                    self.latest = Push.objects.order_by('-pk')[0].id
+                except IndexError:
+                    self.latest = 0
                 return
             new_pushes = Push.objects.filter(pk__gt=self.latest).order_by('pk')
             if self.debug:
