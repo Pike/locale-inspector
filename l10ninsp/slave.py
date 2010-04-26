@@ -10,7 +10,7 @@ import codecs
 from collections import defaultdict
 import os
 from Mozilla.Paths import EnumerateSourceTreeApp
-from Mozilla.CompareLocales import compareApp
+from Mozilla.CompareLocales import compareApp, compareDirs
 
 class intdict(defaultdict):
     def __init__(self):
@@ -43,12 +43,7 @@ class InspectCommand(Command):
   debug = True
   
   def setup(self, args):
-    self.locale = args['locale']
-    self.inipath = args['inipath']
-    self.l10nbase = args['l10nbase']
-    self.workdir = args['workdir']
-    self.basedir = args['basedir']
-    self.gather_stats = args['gather_stats']
+    self.args = args.copy()
     ## more
 
   def start(self):
@@ -62,28 +57,20 @@ class InspectCommand(Command):
     return d
 
   def doCompare(self, *args):
-    log.msg('Starting to compare %s in %s' % (self.locale, self.workdir))
+    locale, workdir, gather_stats = (self.args[k]
+      for k in ('locale', 'workdir', 'gather_stats'))
+    log.msg('Starting to compare %s in %s' % (locale, workdir))
     self.sendStatus({'header': 'Comparing %s against en-US for %s\n' \
-                     % (self.locale, self.workdir)})
-    workingdir = os.path.join(self.builder.basedir, self.workdir)
-    if self.debug:
-      log.msg('trying to import Mozilla from %s'%os.getcwd())
+                     % (locale, workdir)})
+    workingdir = os.path.join(self.builder.basedir, workdir)
     try:
-      app = EnumerateSourceTreeApp(os.path.join(workingdir, self.inipath),
-                                   workingdir,
-                                   os.path.join(workingdir, self.l10nbase),
-                                   [self.locale])
-      obs = None
-      if self.gather_stats:
-          obs = Observer()
-      o = compareApp(app, otherObserver=obs)
+      o, summary, stats = self._compare(workingdir, locale, gather_stats, args)
     except Exception, e:
-      log.msg('%s comparison failed with %s' % (self.locale, str(e)))
+      log.msg('%s comparison failed with %s' % (locale, str(e)))
       log.msg(Failure().getTraceback())
       self.rc = EXCEPTION
       return
     self.rc = SUCCESS
-    summary = o.summary[self.locale]
     if 'obsolete' in summary and summary['obsolete'] > 0:
       self.rc = WARNINGS
     if 'missing' in summary and summary['missing'] > 0:
@@ -98,14 +85,31 @@ class InspectCommand(Command):
     summary['total'] = total
 
     try:
-        if self.gather_stats:
-            self.sendStatus({'stats': obs.dict()})
+        if gather_stats:
+            self.sendStatus({'stats': stats})
         self.sendStatus({'stdout': codecs.utf_8_encode(o.serialize())[0],
                          'result': dict(summary=dict(summary),
                                         details=o.details.toJSON())})
     except Exception, e:
-      log.msg('%s status sending failed with %s' % (self.locale, str(e)))
+      log.msg('%s status sending failed with %s' % (locale, str(e)))
     pass
+
+  def _compare(self, workingdir, locale, gather_stats, args):
+    inipath, l10nbase = (self.args[k]
+      for k in ('inipath', 'l10nbase'))
+    app = EnumerateSourceTreeApp(os.path.join(workingdir, inipath),
+                                 workingdir,
+                                 os.path.join(workingdir, l10nbase),
+                                 [locale])
+    obs = None
+    stats = None
+    if gather_stats:
+      obs = Observer()
+    o = compareApp(app, otherObserver=obs)
+    summary = o.summary[locale]
+    if gather_stats:
+      stats = obs.dict()
+    return o, summary, stats
 
   def finished(self, *args):
     # sometimes self.rc isn't set here, no idea why
@@ -115,4 +119,34 @@ class InspectCommand(Command):
       rc = FAILURE
     self.sendStatus({'rc': rc})
 
-registerSlaveCommand('moz_inspectlocale', InspectCommand, '0.2')
+class InspectDirsCommand(InspectCommand):
+  """Subclass InspectCommand to only compare two directories.
+
+  This is used by the InspectLocaleDirs command, as part of the 
+  dashboard for weave.
+
+  Requires `refpath` and `l10npath` to be in args, both are relative
+  to `workingdir`.
+  """
+  def _compare(self, workingdir, locale, gather_stats, args):
+    """Overload _compare to call compareDirs."""
+    ref, l10n = (self.args[k] for k in ('refpath', 'l10npath'))
+    obs = stats = None
+    if gather_stats:
+      obs = Observer()
+    log.msg(workingdir, ref, l10n)
+    o = compareDirs(os.path.join(workingdir, ref),
+                    os.path.join(workingdir, l10n),
+                    otherObserver = obs)
+    try:
+        summary = o.summary.values()[0]
+    except:
+        log.msg("Couldn't get summary")
+        summary = {}
+    if gather_stats:
+      stats = obs.dict()
+    return o, summary, stats
+
+
+registerSlaveCommand('moz_inspectlocales', InspectCommand, '0.2')
+registerSlaveCommand('moz_inspectlocales_dirs', InspectDirsCommand, '0.2')

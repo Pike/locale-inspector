@@ -120,18 +120,6 @@ class ResultRemoteCommand(LoggedRemoteCommand):
                            for k in ['missing', 'missingInFiles'] \
                            if k in summary])
         self.logs['stdio'].addEntry(5, simplejson.dumps(result, indent=2))
-        # figure out which step we are
-        stepnumber = 0
-        stepname = self.step.step_status.getName()
-        if stepname.startswith("moz_inspectlocales_"):
-            stepnumber = int(stepname[19:]) - 1
-            # It'd be nice if we didn't have to hardcode the URL to the comparison
-            # Picking one that is relative to the waterfall
-            self.step.addURL('comparison',
-                             'compare/%s/%d?step=%d' % \
-                             (self.step.build.getProperty('buildername'),
-                              self.step.build.getProperty('buildnumber'),
-                              stepnumber))
         self.addSummary(summary)
 
     def addStats(self, stats):
@@ -179,6 +167,7 @@ class InspectLocale(LoggingBuildStep):
     """
 
     name = "moz_inspectlocales"
+    cmd_name = name
     warnOnFailure = 1
 
     description = ["comparing"]
@@ -242,7 +231,7 @@ class InspectLocale(LoggingBuildStep):
         except KeyError:
             pass
         self.descriptionDone = [args['locale'], args['tree']]
-        cmd = ResultRemoteCommand("moz_inspectlocale", args)
+        cmd = ResultRemoteCommand(self.cmd_name, args)
         self.startCommand(cmd, [])
   
     def evaluateCommand(self, cmd):
@@ -262,6 +251,55 @@ class InspectLocale(LoggingBuildStep):
         if False and cmd.missing > 0:
             text += ['missing: %d' % cmd.missing]
         return LoggingBuildStep.getText(self,cmd,results) + text
+
+
+class InspectLocaleDirs(InspectLocale):
+    """Subclass InspectLocale to only compare two directories.
+
+    This is used for the dashboard for weave.
+    """
+    name = "moz_inspectlocales_dirs"
+    cmd_name = name
+    def __init__(self, master, workdir, basedir, refpath, l10npath, locale,
+                 tree, gather_stats = False, **kwargs):
+        """
+        @type  master: string
+        @param master: name of the master
+
+        @type  workdir: string
+        @param workdir: local directory (relative to the Builder's root)
+                        where the mozilla and the l10n trees reside
+
+        @type basedir: string
+        @param basdir: path to all local repository clones, relative to the workdir
+
+        @type refpath: string
+        @param refpath: path to the reference dir, relative to the workdir
+
+        @type l10npath: string
+        @param l10npath: path to the reference dir, relative to the workdir
+
+        @type  locale: string
+        @param locale: Language code of the localization to be compared.
+
+        @type  tree: string
+        @param tree: The tree identifier for this branch.
+
+        @type gather_stats: bool
+        @param gather_stats: whether or not to gather stats about untranslated strings.
+        """
+
+        LoggingBuildStep.__init__(self, **kwargs)
+
+        self.args = {'workdir'    : workdir,
+                     'basedir'    : basedir,
+                     'refpath'    : refpath,
+                     'l10npath'   : l10npath,
+                     'locale'     : locale,
+                     'tree'       : tree,
+                     'gather_stats'     : gather_stats,
+                     }
+        self.master = master
 
 
 class GetRevisions(BuildStep):
