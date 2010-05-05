@@ -62,6 +62,9 @@ class DirScheduler(BaseUpstreamScheduler):
             log.msg("not our branch, ignore, %s != %s" %
                     (self.branch, change.branch))
             return
+        # take the 'loc' property as locale
+        if hasattr(change, properties) and 'loc' in change.properties:
+            change.locale = change.properties['loc']
         if not change.locale:
             return
         if change.locale == 'en-US':
