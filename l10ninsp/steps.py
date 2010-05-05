@@ -59,7 +59,7 @@ class ResultRemoteCommand(LoggedRemoteCommand):
             try:
                 cs = Changeset.objects.get(revision__startswith=ident[:12])
                 self.dbrun.revisions.add(cs)
-            except Changeset.DoesNotExist:
+            except (Changeset.DoesNotExist, Changeset.MultipleObjectsReturned):
                 log.msg("no changeset found for %s=%s" % (rev, ident))
                 pass
             if cs is not None and cs.id is not 1:

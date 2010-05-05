@@ -108,13 +108,13 @@ class DirFactory(Factory):
                                                       '/%(l10n_branch)s/%(locale)s'),
                             'haltOnFailure': True}),
             (SetProperty, {'command': 
-                           ['hg', '-R', '.', 'parent', '--template={node|short}\n'], 
+                           ['hg', '-R', '.', 'id', '--id', '--rev', '.'], 
                             'workdir': WithProperties(self.base + 
                                                       '/%(en_branch)s'),
                            'haltOnFailure': True,
                            'property': 'en_revision' }),
             (SetProperty, {'command': 
-                           ['hg', '-R', '.', 'parent', '--template={node|short}\n'], 
+                           ['hg', '-R', '.', 'id', '--id', '--rev', '.'], 
                             'workdir': WithProperties(self.base + 
                                                       '/%(l10n_branch)s/%(locale)s'),
                            'haltOnFailure': True,
