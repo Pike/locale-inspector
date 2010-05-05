@@ -62,8 +62,11 @@ class DirScheduler(BaseUpstreamScheduler):
             log.msg("not our branch, ignore, %s != %s" %
                     (self.branch, change.branch))
             return
-        if not change.locale:
-            return
+        if not hasattr(change, 'locale') or not change.locale:
+            if 'locale' in change.properties:
+                change.locale = change.properties['locale']
+            else:
+                return
         if change.locale == 'en-US':
             # trigger all builds, load repo index
             d = getPage(self.repourl + self.branch + '?style=raw')
