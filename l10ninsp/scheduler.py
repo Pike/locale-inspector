@@ -63,7 +63,7 @@ class DirScheduler(BaseUpstreamScheduler):
                     (self.branch, change.branch))
             return
         # take the 'loc' property as locale
-        if hasattr(change, properties) and 'loc' in change.properties:
+        if hasattr(change, 'properties') and 'loc' in change.properties:
             change.locale = change.properties['loc']
         if not change.locale:
             return
