@@ -151,7 +151,8 @@ class ResultRemoteCommand(LoggedRemoteCommand):
     def addSummary(self, summary):
         self.ensureDBRun()
         for k in ('missing', 'missingInFiles', 'obsolete', 'total',
-                  'changed', 'unchanged', 'keys', 'completion', 'errors'):
+                  'changed', 'unchanged', 'keys', 'completion', 'errors',
+                  'report', 'warnings'):
             setattr(self.dbrun, k, summary.get(k, 0))
         self.dbrun.save()
 
