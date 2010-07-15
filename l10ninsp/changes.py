@@ -63,12 +63,14 @@ def createChangeSource(settings, pollInterval=3*60):
             else:
                 branch = repo.name.encode('utf-8')
             for cs in push.changesets.filter(branch=self.branch).order_by('pk'):
+                when = timegm(push.push_date.utctimetuple()) +\
+                    push.push_date.microsecond/1000.0/1000
                 c = changes.Change(who=push.user.encode('utf-8'),
                                     files=map(lambda u: u.encode('utf-8'),
                                     cs.files.values_list('path', flat=True)),
                                     revision=cs.revision.encode('utf-8'),
                                     comments=cs.description.encode('utf-8'),
-                                    when=timegm(push.push_date.utctimetuple()),
+                                    when=when,
                                     branch=branch)
                 if repo.forest is not None:
                     # locale change

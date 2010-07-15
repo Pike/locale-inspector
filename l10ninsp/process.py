@@ -16,13 +16,6 @@ class Factory(factory.BuildFactory):
         factory.BuildFactory.__init__(self, steps)
         self.base = basedir
         self.mastername = mastername
-        # hack, should be factored
-        from ConfigParser import ConfigParser
-        cp = ConfigParser()
-        cp.read('l10nbuilds.ini')
-        self.inipaths = {}
-        for s in cp.sections():
-            self.inipaths[s] = cp.get(s, 'l10n.ini')
 
     def newBuild(self, requests):
         steps = self.createSteps(requests[-1])
@@ -40,7 +33,6 @@ class Factory(factory.BuildFactory):
             revs = revs[:]
         revs.remove('l10n')
         tree = request.properties.getProperty('tree')
-        preSteps = ((GetRevisions, {}),)
         sourceSteps = tuple(
             (ShellCommand, {'command': 
                             ['hg', 'update', '-r', 
@@ -76,14 +68,13 @@ class Factory(factory.BuildFactory):
                     'master': self.mastername,
                     'workdir': self.base,
                     'basedir': WithProperties('%(en_branch)s'),
-                    'inipath': WithProperties('%(en_branch)s/' +
-                                              self.inipaths[tree]),
+                    'inipath': WithProperties('%(en_branch)s/%(l10n.ini)s'),
                     'l10nbase': WithProperties('%(l10n_branch)s'),
                     'locale': WithProperties('%(locale)s'),
                     'tree': tree,
                     'gather_stats': True,
                     }),)
-        return preSteps + sourceSteps + idSteps + l10nSteps + inspectSteps
+        return sourceSteps + idSteps + l10nSteps + inspectSteps
 
 
 class DirFactory(Factory):

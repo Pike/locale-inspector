@@ -2,16 +2,21 @@ import warnings
 
 from twisted.python import log
 from twisted.internet import reactor
+from twisted.web.client import getPage
 from buildbot.process.buildstep import BuildStep, LoggingBuildStep, LoggedRemoteCommand
 from buildbot.status.builder import SUCCESS, WARNINGS, FAILURE, SKIPPED, \
     Results
-from buildbot.steps.shell import WithProperties
+from buildbot.process.properties import WithProperties
 
 from pprint import pformat
 from collections import defaultdict
 import simplejson
+from ConfigParser import ConfigParser, NoSectionError, NoOptionError
+from cStringIO import StringIO
 
 from bb2mbdb.utils import timeHelper
+
+import logger
 
 class ResultRemoteCommand(LoggedRemoteCommand):
     """
@@ -342,3 +347,173 @@ class GetRevisions(BuildStep):
     def finished(self, results):
         self.step_status.setText(self.descriptionDone)
         BuildStep.finished(self, results)
+
+
+class TreeLoader(BuildStep):
+    '''BuildStep to load data from l10n.ini on remote repos.
+
+    Does mostly just async network traffic, directly on the master,
+    it wouldn't be more work there if we'd use the slave, and then
+    marshall the data through the network back to the master.
+    '''
+    def __init__(self, treename, l10nbuilds, cb=None, **kwargs):
+        '''Create a TreeLoader step. In addition to the standard arguments,
+        treename is the name of the tree,
+        l10nbuilds is the local ini file describing the builds,
+        cb is a callback with signature (tree, changes=None)
+        '''
+        BuildStep.__init__(self, **kwargs)
+        self.addFactoryArguments(treename = treename,
+                                 l10nbuilds = l10nbuilds,
+                                 cb=cb)
+        self.treename = treename
+        self.l10nbuilds = l10nbuilds
+        self.cb = cb
+
+    def start(self):
+        from scheduler import Tree
+        loog = self.addLog('stdio')
+        self.pending = 0
+        properties = self.build.getProperties()
+        self.rendered_tree = tree = properties.render(self.treename)
+        l10nbuilds = properties.render(self.l10nbuilds)
+        cp = ConfigParser()
+        cp.read(l10nbuilds)
+        repo = cp.get(tree, 'repo')
+        branch = cp.get(tree, 'mozilla')
+        path = cp.get(tree, 'l10n.ini')
+        l10nbranch = cp.get(tree, 'l10n')
+        locales = cp.get(tree, 'locales')
+        if locales == 'all':
+            alllocales = "yes"
+        else:
+            alllocales = "no"
+            properties.update({'locales': filter(None, locales.split())},
+                              "Build")
+        self.tree = Tree(self.rendered_tree, repo, branch, l10nbranch, path)
+        loog.addStdout('Loading l10n.inis for %s\n' % self.rendered_tree)
+        logger.debug('scheduler.l10n.tree',
+                     'Loading l10n.inis for %s, alllocales: %s' %
+                     (self.rendered_tree, alllocales))
+        self.loadIni(repo, branch, path, alllocales)
+
+    def loadIni(self, repo, branch, path, alllocales="no"):
+        url = repo + '/' + branch + '/raw-file/default/' + path
+        self.getLog('stdio').addStdout('\nloading %s\n' % url)
+        self.step_status.setText(['loading', 'l10n.ini'])
+        self.step_status.setText2([repo, branch, path])
+        self.pending += 1
+        d = getPage(url)
+        d.addCallbacks(self.onL10niniLoad, self.onL10niniFail,
+                       callbackArgs=[repo, branch, path, alllocales])
+
+    def onL10niniLoad(self, inicontent, repo, branch, path, alllocales):
+        self.pending -= 1
+        logger.debug('scheduler.l10n.tree',
+                     'Loaded %s, alllocales: %s' % (path,alllocales))
+        self.step_status.setText(['loaded', 'l10n.ini'])
+        loog = self.getLog('stdio')
+        cp = ConfigParser()
+        cp.readfp(StringIO(inicontent), path)
+        try:
+            dirs = cp.get('compare', 'dirs').split()
+        except (NoOptionError, NoSectionError):
+            dirs = []
+        try:
+            dirs += cp.get('extras', 'dirs').split()
+        except (NoOptionError, NoSectionError):
+            pass
+        try:
+            tld = cp.get('compare', 'tld')
+            # remove tld from comparison dirs
+            if tld in dirs:
+                dirs.remove(tld)
+        except (NoOptionError, NoSectionError):
+            tld = None
+
+        if dirs:
+            loog.addStdout("adding %s on branch %s for %s\n" % 
+                           (", ".join(dirs), branch, self.rendered_tree))
+        if tld is not None:
+            loog.addStdout("adding a tld compare for %s on %s\n" % (tld, branch))
+
+        self.tree.addData(branch, path, dirs, tld)
+
+        try:
+            for title, _path in cp.items('includes'):
+                try:
+                    # check if the load details are overloaded
+                    details = dict(cp.items('include_%s' % title))
+                    if details['type'] != 'hg':
+                        continue
+                    loog.addStdout("need to load %s from %s on %s, %s\n" %
+                                   (title, details['l10n.ini'], details['repo'],
+                                    details['mozilla']))
+                    # check if we got the en-US branch already, if not
+                    # we're likely loading toolkit off a different repo
+                    enbranch = details['mozilla']
+                    if enbranch not in self.tree.branches.values():
+                        self.tree.branches[title] = enbranch
+                    self.loadIni(details['repo'], details['mozilla'],
+                                 details['l10n.ini'])
+                except NoSectionError:
+                    loog.addStdout("need to load %s from %s\n" % (title, _path))
+                    self.loadIni(repo, branch, _path)
+        except NoSectionError:
+            pass
+        try:
+            if alllocales == 'yes':
+                allpath = cp.get('general','all')
+                self.tree.all_locales = allpath
+                logger.debug('scheduler.l10n.tree',
+                             'loading all-locales for %s from %s' % 
+                             (self.tree.name, allpath))
+                self.pending += 1
+                d = getPage(repo + '/' + branch + '/raw-file/default/' + allpath)
+                d.addCallbacks(self.allLocalesLoaded,
+                               self.allLocalesFailed)
+        except NoSectionError:
+            pass
+        self.endLoad()
+
+    def onL10niniFail(self, failure):
+        self.pending -= 1
+        loog = self.getLog('stdio')
+        loog.addStderr(failure.getErrorMessage())
+        if self.pending <= 0:
+            self.step_status.setText(['configure', self.rendered_tree,'failed'])
+            self.step_status.setText2([])
+            self.finished(FAILURE)
+        return failure
+
+    def allLocalesLoaded(self, page):
+        self.pending -= 1
+        locales = filter(None, page.splitlines())
+        self.build.setProperty('locales', locales,
+                               'Build')
+        logger.debug('scheduler.l10n.tree',
+                     'all-locales loaded, found %s' %
+                     str(locales))
+        self.endLoad()
+
+    def allLocalesFailed(self, page):
+        self.pending -= 1
+        if self.pending <= 0:
+            self.step_status.setText(['configure', self.rendered_tree,'failed'])
+            self.step_status.setText2([])
+            self.finished(FAILURE)
+        return failure
+
+    def endLoad(self):
+        logger.debug('scheduler.l10n.tree',
+                     'load ended, pending jobs: %d' % self.pending)
+        if self.pending <= 0:
+            self.step_status.setText(['configured', self.rendered_tree])
+            self.step_status.setText2([])
+            if self.cb is not None:
+                try:
+                    self.tree.locales = self.build.getProperties().getProperty('locales',[])[:]
+                    self.cb(self.tree, changes=self.build.allChanges())
+                except Exception, e:
+                    logger.debug('scheduler.l10n.tree', str(e))
+            self.finished(SUCCESS)
