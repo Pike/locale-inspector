@@ -10,7 +10,10 @@ from buildbot.process.properties import WithProperties
 
 from pprint import pformat
 from collections import defaultdict
-import simplejson
+try:
+    import json
+except:
+    import simplejson as json
 from ConfigParser import ConfigParser, NoSectionError, NoOptionError
 from cStringIO import StringIO
 
@@ -124,7 +127,7 @@ class ResultRemoteCommand(LoggedRemoteCommand):
             missing = sum([summary[k] \
                            for k in ['missing', 'missingInFiles'] \
                            if k in summary])
-        self.logs['stdio'].addEntry(5, simplejson.dumps(result, indent=2))
+        self.logs['stdio'].addEntry(5, json.dumps(result, indent=2))
         self.addSummary(summary)
 
     def addStats(self, stats):
