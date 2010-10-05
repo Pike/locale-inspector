@@ -8,6 +8,9 @@ from twisted.internet import reactor, defer
 from twisted.python import util, log
 from l10ninsp.slave import InspectCommand
 from buildbot import interfaces
+from buildbot.process.base import BuildRequest
+from buildbot.sourcestamp import SourceStamp
+from buildbot.process.properties import Properties
 from buildbot.test.runutils import SlaveCommandTestBase, RunMixin
 from shutil import copytree
 import pdb
@@ -76,7 +79,27 @@ missing
 <!ENTITY test4 "local value 4">
 '''),
                   (('l10n','missing','app','dir','file.dtd'),
-                   '<!ENTITY test "local value">\n<!ENTITY test3 "value3">\n'))
+                   '<!ENTITY test "local value">\n<!ENTITY test3 "value3">\n'),
+                  (('l10n','errors','app','dir','file.dtd'),
+                   '''
+<!ENTITY test "local " value">
+<!ENTITY test2 "local & value2">
+<!ENTITY test3 "local <foo> value3">
+'''),
+                  (('l10n','warnings','app','dir','file.dtd'),
+                   '''
+<!ENTITY test "local value">
+<!ENTITY test2 "local value2">
+<!ENTITY test3 "local &foo; value3">
+'''),
+                  (('l10n','mixed','app','dir','file.dtd'),
+                   '''
+<!ENTITY test "local " value">
+<!ENTITY test2 "local value2">
+<!ENTITY test3 "local &foo; value3">
+<!ENTITY test4 "obs1">
+''')
+                  )
     def setUp(self):
         self.setUpBuilder(self.basedir)
         createStage(self.basedir, *self.stageFiles)
@@ -133,6 +156,24 @@ missing
                       dict(completion=33))
         return d
 
+    def testErrors(self):
+        args = self.args('app', 'errors')
+        d = self.startCommand(InspectCommand, args)
+        d.addCallback(self._check,
+                      2,
+                      None,
+                      dict(errors=3, missing=1))
+        return d
+
+    def testWarnings(self):
+        args = self.args('app', 'warnings')
+        d = self.startCommand(InspectCommand, args)
+        d.addCallback(self._check,
+                      0,
+                      None,
+                      dict(warnings=1, completion=100, total=3))
+        return d
+
     def _check(self, res, expectedRC, expectedDetails, exSummary, exStats={}):
         self.assertEqual(self.findRC(), expectedRC)
         res = self._getResults()
@@ -160,22 +201,23 @@ config = """
 from buildbot.process import factory
 from l10ninsp.steps import InspectLocale
 from buildbot.buildslave import BuildSlave
+from buildbot.process.properties import WithProperties
 
 f = factory.BuildFactory()
-f.addStep(InspectLocale, master='l10n-master', workdir='.', basedir='mozilla',
+f.addStep(InspectLocale, master='test-master', workdir='.', basedir='mozilla',
                          inipath='mozilla/app/locales/l10n.ini',
-                         l10nbase='l10n', locale='missing', tree='app',
-                         gather_stats=True)
+                         l10nbase='l10n', locale=WithProperties('%(locale)s'),
+                         tree='app',  gather_stats=True)
 BuildmasterConfig = c = {}
 c['properties'] = {
   'revisions': [],
-  'l10n_branch': 'test'
+  'l10n_branch': 'l10n'
   }
 c['slaves'] = [BuildSlave('bot1', 'sekrit')]
 c['schedulers'] = []
 c['builders'] = []
 c['builders'].append({'name': 'test_builder', 'slavename': 'bot1',
-                      'builddir': '.', 'factory': f})
+                      'factory': f})
 c['slavePortnum'] = 0
 
 from bb2mbdb.status import setupBridge
@@ -193,26 +235,22 @@ class MasterSide(RunMixin, unittest.TestCase):
         connection.creation.destroy_test_db(self.old_name)
         return RunMixin.tearDown(self)
 
-    def testBuild(self):
-        m = self.master
-        s = m.getStatus()
-        m.loadConfig(config)
-        m.readConfig = True
-        m.startService()
-        d = self.connectSlave(builders=["test_builder"])
-        d.addCallback(self._doBuild)
-        return d
+    # overloaded to start builds with properties
+    def requestBuild(self, builder, locale):
+        # returns a Deferred that fires with an IBuildStatus object when the
+        # build is finished
+        props = Properties()
+        props.setProperty('locale', locale, 'scheduler')
+        props.setProperty('tree', 'app', 'scheduler')
+        req = BuildRequest("forced build", SourceStamp(), 'test_builder',
+                           properties=props)
+        self.control.getBuilder(builder).requestBuild(req)
+        return req.waitUntilFinished()
 
-    def _doBuild(self, res):
-        createStage('slavebase-bot1', *SlaveSide.stageFiles)
-        c = interfaces.IControl(self.master)
-        d = self.requestBuild("test_builder")
-        d2 = self.master.botmaster.waitUntilBuilderIdle("test_builder")
-        dl = defer.DeferredList([d, d2])
-        dl.addCallback(self._doneBuilding)
-        return dl
+    def testMissing(self):
+        return self._testBuild('missing', self._doneMissing)
 
-    def _doneBuilding(self, res):
+    def _doneMissing(self, res):
         self.assertEquals(Run.objects.count(), 1, "one run expected")
         r = Run.objects.all()[0]
         self.assertEquals(r.missing, 1)
@@ -223,3 +261,75 @@ class MasterSide(RunMixin, unittest.TestCase):
         self.assertEquals(mc.name, 'app')
         self.assertEquals(mc.count, 2)
         pass
+
+    def testWarnings(self):
+        return self._testBuild('warnings', self._doneWarnings)
+
+    def _doneWarnings(self, res):
+        self.assertEquals(Run.objects.count(), 1, "one run expected")
+        r = Run.objects.all()[0]
+        self.assertEquals(r.missing, 0)
+        self.assertEquals(r.changed, 3)
+        self.assertEquals(r.warnings, 1)
+        self.assertEquals(ModuleCount.objects.count(), 0,
+                          "no module expected")
+        pass
+
+    def testErrors(self):
+        return self._testBuild('errors', self._doneErrors)
+
+    def _doneErrors(self, res):
+        self.assertEquals(Run.objects.count(), 1, "one run expected")
+        r = Run.objects.all()[0]
+        self.assertEquals(r.missing, 1)
+        self.assertEquals(r.changed, 2)
+        self.assertEquals(r.warnings, 0)
+        self.assertEquals(r.errors, 3)
+        self.assertEquals(ModuleCount.objects.count(), 1,
+                          "no module expected")
+        mc = ModuleCount.objects.all()[0]
+        self.assertEquals(mc.name, 'app')
+        self.assertEquals(mc.count, 1)
+        pass
+
+
+    def runAll(self):
+        '''Run all locales in one go and dump the fixture,
+        good for other tests.
+        '''
+        d = defer.Deferred()
+        def dumpFixture(res):
+            from django.core.management.commands.dumpdata import Command
+            open("allruns.json","w").write(Command().handle(indent=2))
+            d.callback(res)
+        def runMixed(res):
+            return self._doBuild(None, 'mixed', dumpFixture)
+        def runWarnings(res):
+            return self._doBuild(None, 'warnings', runMixed)
+        def runErrors(res):
+            return self._doBuild(None, 'errors', runWarnings)
+        def runMissing(res):
+            return self._doBuild(None, 'missing', runErrors)
+        def runObsolete(res):
+            return self._doBuild(None, 'obsolete', runMissing)
+        self._testBuild('good', runObsolete)
+        return d
+
+    def _testBuild(self, locale, cb):
+        m = self.master
+        s = m.getStatus()
+        m.loadConfig(config)
+        m.readConfig = True
+        m.startService()
+        d = self.connectSlave(builders=["test_builder"])
+        d.addCallback(self._doBuild, locale, cb)
+        createStage('slavebase-bot1/test_builder', *SlaveSide.stageFiles)
+        return d
+
+    def _doBuild(self, res, locale, cb):
+        c = interfaces.IControl(self.master)
+        d = self.requestBuild("test_builder", locale)
+        d2 = self.master.botmaster.waitUntilBuilderIdle("test_builder")
+        dl = defer.DeferredList([d, d2])
+        dl.addCallback(cb)
+        return dl
