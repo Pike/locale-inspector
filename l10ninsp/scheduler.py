@@ -345,7 +345,11 @@ class AppScheduler(BaseUpstreamScheduler):
                                             push_date__lte=when,
                                             changesets__branch__name='default')
                     try:
-                        _r = str(q.order_by('-pk')[0].tip.shortrev)
+                        # get the latest changeset on the 'default' branch
+                        #  not strictly .tip, for pushes with heads on
+                        #  multiple branches (bug 602182)
+                        _c = q.order_by('-pk')[0].changesets.order_by('-pk')
+                        _r = str(_c.filter(branch__name='default')[0].shortrev)
                     except IndexError:
                         # no pushes, update to empty repo 000000000000
                         _r = "000000000000"
