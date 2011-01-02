@@ -173,7 +173,7 @@ class AppScheduler(BaseUpstreamScheduler):
                                    SourceStamp(),
                                    properties=props)
             self.submitBuildSet(bs)
-        _ds.append(bs.waitUntilFinished())
+            _ds.append(bs.waitUntilFinished())
         d = defer.DeferredList(_ds)
         d.addCallback(self.onTreesBuilt)
         self.waitOnTree = d
