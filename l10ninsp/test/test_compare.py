@@ -23,6 +23,7 @@ if not settings.configured:
                                          'mbdb',
                                          'bb2mbdb',
                                          'l10nstats',
+                                         'tinder',
                                          ),
                        BUILDMASTER_BASE = 'basedir')
 
@@ -65,6 +66,21 @@ missing
 '''),
                   (('mozilla','app','locales','en-US','dir','file.dtd'),
                    '<!ENTITY test "value">\n<!ENTITY test2 "value2">\n<!ENTITY test3 "value3">\n'),
+                  (('mozilla','embedding','android','locales','l10n.ini'),
+                   """[general]
+depth = ../../..
+
+[compare]
+dirs = embedding/android
+"""),
+                  (('mozilla','embedding','android','locales','en-US','dir','file.dtd'),
+                   '''
+<!ENTITY test "value">
+<!ENTITY test2 "value2">
+<!ENTITY test3 "value3">
+<!ENTITY test4 "value4">
+<!ENTITY test5 "value5">
+'''),
                   (('l10n','good','app','dir','file.dtd'),
                    '''
 <!ENTITY test "local value">
@@ -98,6 +114,14 @@ missing
 <!ENTITY test2 "local value2">
 <!ENTITY test3 "local &foo; value3">
 <!ENTITY test4 "obs1">
+'''),
+                  (('l10n','android','embedding','android','dir','file.dtd'),
+                   '''
+<!ENTITY test "local value">
+<!ENTITY test2 "local\' value2">
+<!ENTITY test3 \'"local\&apos; value3"\'>
+<!ENTITY test4 \'"local&apos; value4"\'>
+<!ENTITY test5 "value5">
 ''')
                   )
     def setUp(self):
@@ -208,6 +232,11 @@ f.addStep(InspectLocale, master='test-master', workdir='.', basedir='mozilla',
                          inipath='mozilla/app/locales/l10n.ini',
                          l10nbase='l10n', locale=WithProperties('%(locale)s'),
                          tree='app',  gather_stats=True)
+af = factory.BuildFactory()
+af.addStep(InspectLocale, master='test-master', workdir='../test_builder', basedir='mozilla',
+                         inipath='mozilla/embedding/android/locales/l10n.ini',
+                         l10nbase='l10n', locale=WithProperties('%(locale)s'),
+                         tree='android_app',  gather_stats=True)
 BuildmasterConfig = c = {}
 c['properties'] = {
   'revisions': [],
@@ -218,6 +247,8 @@ c['schedulers'] = []
 c['builders'] = []
 c['builders'].append({'name': 'test_builder', 'slavename': 'bot1',
                       'factory': f})
+c['builders'].append({'name': 'test_android_builder', 'slavename': 'bot1',
+                      'factory': af})
 c['slavePortnum'] = 0
 
 from bb2mbdb.status import setupBridge
@@ -242,7 +273,7 @@ class MasterSide(RunMixin, unittest.TestCase):
         props = Properties()
         props.setProperty('locale', locale, 'scheduler')
         props.setProperty('tree', 'app', 'scheduler')
-        req = BuildRequest("forced build", SourceStamp(), 'test_builder',
+        req = BuildRequest("forced build", SourceStamp(), builder,
                            properties=props)
         self.control.getBuilder(builder).requestBuild(req)
         return req.waitUntilFinished()
@@ -293,17 +324,47 @@ class MasterSide(RunMixin, unittest.TestCase):
         pass
 
 
+    def testAndroid(self):
+        return self._testBuild('android', self._doneAndroid, "test_android_builder")
+
+    def _doneAndroid(self, res):
+        self.assertEquals(Run.objects.count(), 1, "one run expected")
+        r = Run.objects.all()[0]
+        self.assertEquals(r.missing, 0)
+        self.assertEquals(r.changed, 4)
+        self.assertEquals(r.warnings, 0)
+        self.assertEquals(r.errors, 1)
+        self.assertEquals(ModuleCount.objects.count(), 1,
+                          "no module expected")
+        mc = ModuleCount.objects.all()[0]
+        self.assertEquals(mc.name, 'embedding/android')
+        self.assertEquals(mc.count, 1)
+        pass
+
+
     def runAll(self):
         '''Run all locales in one go and dump the fixture,
         good for other tests.
         '''
         d = defer.Deferred()
         def dumpFixture(res):
+            import os.path
+            try:
+                from tinder.models import WebHead, MasterMap, Master
+                wh = WebHead(name='head 1')
+                wh.save()
+                tm = Master.objects.get(name='test-master')
+                MasterMap.objects.create(webhead = wh, master = tm,
+                                         logmount = os.path.abspath('basedir'))
+            except Exception, e:
+                print e
             from django.core.management.commands.dumpdata import Command
             open("allruns.json","w").write(Command().handle(indent=2))
             d.callback(res)
+        def runAndroid(res):
+            return self._doBuild(None, 'android', dumpFixture, buildername='test_android_builder')
         def runMixed(res):
-            return self._doBuild(None, 'mixed', dumpFixture)
+            return self._doBuild(None, 'mixed', runAndroid)
         def runWarnings(res):
             return self._doBuild(None, 'warnings', runMixed)
         def runErrors(res):
@@ -315,21 +376,21 @@ class MasterSide(RunMixin, unittest.TestCase):
         self._testBuild('good', runObsolete)
         return d
 
-    def _testBuild(self, locale, cb):
+    def _testBuild(self, locale, cb, buildername="test_builder"):
         m = self.master
         s = m.getStatus()
         m.loadConfig(config)
         m.readConfig = True
         m.startService()
-        d = self.connectSlave(builders=["test_builder"])
-        d.addCallback(self._doBuild, locale, cb)
+        d = self.connectSlave(builders=["test_builder", "test_android_builder"])
+        d.addCallback(self._doBuild, locale, cb, buildername)
         createStage('slavebase-bot1/test_builder', *SlaveSide.stageFiles)
         return d
 
-    def _doBuild(self, res, locale, cb):
+    def _doBuild(self, res, locale, cb, buildername="test_builder"):
         c = interfaces.IControl(self.master)
-        d = self.requestBuild("test_builder", locale)
-        d2 = self.master.botmaster.waitUntilBuilderIdle("test_builder")
+        d = self.requestBuild(buildername, locale)
+        d2 = self.master.botmaster.waitUntilBuilderIdle(buildername)
         dl = defer.DeferredList([d, d2])
         dl.addCallback(cb)
         return dl
