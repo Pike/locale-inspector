@@ -35,7 +35,7 @@ class Factory(factory.BuildFactory):
         tree = request.properties.getProperty('tree')
         sourceSteps = tuple(
             (ShellCommand, {'command': 
-                            ['hg', 'update', '-r', 
+                            ['hg', 'update', '-C', '-r', 
                              WithProperties('%%(%s_revision)s' % mod)],
                             'workdir': WithProperties(self.base + 
                                                       '/%%(%s_branch)s' % mod),
@@ -51,7 +51,7 @@ class Factory(factory.BuildFactory):
             for mod in revs)
         l10nSteps = (
             (ShellCommand, {'command': 
-                            ['hg', 'update', '-r', 
+                            ['hg', 'update', '-C', '-r', 
                              WithProperties('%(l10n_revision)s')],
                             'workdir': WithProperties(self.base + 
                                                       '/%(l10n_branch)s/%(locale)s'),
@@ -87,13 +87,13 @@ class DirFactory(Factory):
         preSteps = ((GetRevisions, {}),)
         sourceSteps = (
             (ShellCommand, {'command': 
-                            ['hg', 'update', '-r', 
+                            ['hg', 'update', '-C', '-r', 
                              WithProperties('%(en_revision)s')],
                             'workdir': WithProperties(self.base + 
                                                       '/%(en_branch)s'),
                             'haltOnFailure': True}),
             (ShellCommand, {'command': 
-                            ['hg', 'update', '-r', 
+                            ['hg', 'update', '-C', '-r', 
                              WithProperties('%(l10n_revision)s')],
                             'workdir': WithProperties(self.base + 
                                                       '/%(l10n_branch)s/%(locale)s'),
