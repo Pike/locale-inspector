@@ -18,7 +18,7 @@ import pdb
 from django.conf import settings
 
 if not settings.configured:
-    settings.configure(DATABASE_ENGINE = 'sqlite3',
+    settings.configure(DATABASES = {'default':{'ENGINE':'django.db.backends.sqlite3'}},
                        INSTALLED_APPS = ('life',
                                          'mbdb',
                                          'bb2mbdb',
@@ -28,7 +28,7 @@ if not settings.configured:
                        BUILDMASTER_BASE = 'basedir')
 
 from l10nstats.models import Run, Tree, Locale, ModuleCount
-from django.test.utils import connection
+from django.db import connection
 
 def createStage(basedir, *files):
     '''Create a staging environment in the given basedir

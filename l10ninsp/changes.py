@@ -29,7 +29,7 @@ def createChangeSource(settings, pollInterval=3*60):
             self.loop.stop()
             return base.ChangeSource.stopService(self)
         
-        @transaction.commit_manually
+        @transaction.commit_on_success
         def poll(self):
             '''Check for new pushes.
 
