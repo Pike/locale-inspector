@@ -262,9 +262,9 @@ class AppScheduler(BaseUpstreamScheduler):
         return
 
     def checkEnUS(self, result, branchdata, change):
-        '''Factored part of change handling that's either called
+        """Factored part of change handling that's either called
         from onChange, or from onTreesBuilt.
-        '''
+        """
         # ignore result, either None or list of build sets
         logger.debug('scheduler.l10n',
                      'checking en-US for change %d' % change.number)
@@ -352,7 +352,7 @@ class AppScheduler(BaseUpstreamScheduler):
                         _r = str(_c.filter(branch__name='default')[0].shortrev)
                     except IndexError:
                         # no pushes, update to empty repo 000000000000
-                        _r = "000000000000"
+                        _r = "default"
                 props.setProperty(k+"_revision", _r, "Scheduler")
             props.update({"tree": tree,
                           "locale": locale,
