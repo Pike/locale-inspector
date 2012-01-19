@@ -1,4 +1,4 @@
-
+# -*- coding: utf-8 -*-
 
 # test step.ShellCommand and the slave-side commands.ShellCommand
 
@@ -21,7 +21,6 @@ if not settings.configured:
     settings.configure(DATABASES = {'default':{'ENGINE':'django.db.backends.sqlite3'}},
                        INSTALLED_APPS = ('life',
                                          'mbdb',
-                                         'bb2mbdb',
                                          'l10nstats',
                                          'tinder',
                                          ),
@@ -103,11 +102,11 @@ dirs = embedding/android
 <!ENTITY test3 "local <foo> value3">
 '''),
                   (('l10n','warnings','app','dir','file.dtd'),
-                   '''
+                   u'''
 <!ENTITY test "local value">
 <!ENTITY test2 "local value2">
-<!ENTITY test3 "local &foo; value3">
-'''),
+<!ENTITY test3 "local &ƞǿŧ; value3">
+'''.encode('utf-8')),
                   (('l10n','mixed','app','dir','file.dtd'),
                    '''
 <!ENTITY test "local " value">
@@ -349,17 +348,18 @@ class MasterSide(RunMixin, unittest.TestCase):
         d = defer.Deferred()
         def dumpFixture(res):
             import os.path
-            try:
-                from tinder.models import WebHead, MasterMap, Master
-                wh = WebHead(name='head 1')
-                wh.save()
-                tm = Master.objects.get(name='test-master')
-                MasterMap.objects.create(webhead = wh, master = tm,
-                                         logmount = os.path.abspath('basedir'))
-            except Exception, e:
-                print e
             from django.core.management.commands.dumpdata import Command
-            open("allruns.json","w").write(Command().handle(indent=2))
+            from django.core.management.base import CommandError
+            try:
+                (open("allruns.json","w")
+                 .write(Command().handle(use_natural_keys=True,
+                                         indent=2)))
+            except CommandError, e:
+                log.msg("You might run in to https://code.djangoproject.com/ticket/16317")
+                log.err(e)
+            (open("mounts_local.py","w")
+             .write("""LOG_MOUNTS = {'test-master': '/Users/axelhecht/src/locale-inspector/_trial_temp/basedir/'}
+"""))
             d.callback(res)
         def runAndroid(res):
             return self._doBuild(None, 'android', dumpFixture, buildername='test_android_builder')
