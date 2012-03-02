@@ -54,7 +54,7 @@ class ResultRemoteCommand(LoggedRemoteCommand):
                                         tree = tree,
                                         build = build)
         self.dbrun.activate()
-        from pushes.models import Changeset, Push
+        from life.models import Changeset, Push
         revs = self.step.build.getProperty('revisions')
         srctime = None
         for rev in revs:
