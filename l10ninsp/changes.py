@@ -9,7 +9,7 @@ from buildbot.changes import base, changes
 
 def createChangeSource(settings, pollInterval=3*60):
     os.environ['DJANGO_SETTINGS_MODULE'] = settings
-    from pushes.models import Push, Branch
+    from life.models import Push, Branch
     from django.db import transaction
     class MBDBChangeSource(base.ChangeSource):
         debug = True
