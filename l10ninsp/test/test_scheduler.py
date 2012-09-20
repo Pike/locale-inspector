@@ -134,3 +134,66 @@ from django.test import TestCase as DjangoTest
 class BuildApp(unittest.TestCase, DjangoTest):
     pass
 '''
+
+
+class DirScheduler(unittest.TestCase):
+    def setUp(self):
+        self.master = master = FakeMaster()
+        master.sets = []
+        master.startService()
+
+    def tearDown(self):
+        d = self.master.stopService()
+        return d
+
+    def addScheduler(self, name, tree, branch, builderNames, repourl):
+        s = scheduler.DirScheduler(name, tree, branch, builderNames, repourl)
+        s.setServiceParent(self.master)
+        s.getPage = self.getPage
+        self.scheduler = s
+
+    def getPage(self, url):
+        d = defer.succeed('''dir/ab
+dir/en-US
+dir/fr
+dir/x-testing
+''')
+        return d
+
+    def setupSimple(self):
+        self.addScheduler('test-sched', 'dir-compare', 'dir', ['dir-compare'], 'http://127.0.0.1:%i/' % 8080)
+
+    def testAB(self):
+        self.setupSimple()
+        c = Change('author', ['some/file.dtd'], 'comment',
+                   branch='dir', properties={'locale': 'ab'})
+        c.number = 1
+        self.scheduler.addChange(c)
+        self.failUnlessEqual(len(self.master.sets), 1)
+        bset = self.master.sets[0]
+        props = bset.getProperties()
+        self.assertEqual(props['locale'], 'ab')
+        self.assertEqual(props['branch'], 'dir')
+        self.assertEqual(props['tree'], 'dir-compare')
+        self.failUnlessEqual(bset.builderNames, ['dir-compare'])
+        ftb = FakeBuilder('dir-compare')
+        bset.start([ftb])
+        self.failUnlessEqual(len(ftb.requests), 1)
+        st = bset.status
+        self.failIf(st.isFinished())
+        builder = builderstatus.BuilderStatus('dir-compare')
+        build = builderstatus.BuildStatus(builder, 1)
+        build.setResults(builderstatus.SUCCESS)
+        ftb.requests[0].finished(build)
+        self.failUnless(st.isFinished())
+
+    def test_en_US(self):
+        self.setupSimple()
+        c = Change('author', ['some/file.dtd'], 'comment',
+                   branch='dir', properties={'locale': 'en-US'})
+        c.number = 1
+        self.scheduler.addChange(c)
+        self.failUnlessEqual(len(self.master.sets), 3)
+        locs = sorted(map(lambda bset: bset.getProperties()['locale'],
+                          self.master.sets))
+        self.assertEqual(locs, ['ab', 'fr', 'x-testing'])

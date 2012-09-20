@@ -383,6 +383,8 @@ class DirScheduler(BaseUpstreamScheduler):
         self.builderNames = builderNames
         self.repourl = repourl
 
+    def getPage(self, url):
+        return getPage(url)
 
     # Internal helper
     def queueBuild(self, locale, change):
@@ -432,7 +434,7 @@ class DirScheduler(BaseUpstreamScheduler):
                 return
         if change.locale == 'en-US':
             # trigger all builds, load repo index
-            d = getPage(self.repourl + self.branch + '?style=raw')
+            d = self.getPage(self.repourl + self.branch + '?style=raw')
             d.addCallback(self.onRepoIndex, change)
             #d.addErrback(self.failedRepo)
             return
