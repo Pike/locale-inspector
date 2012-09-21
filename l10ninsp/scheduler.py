@@ -373,7 +373,7 @@ class DirScheduler(BaseUpstreamScheduler):
     Scheduler used for l10n weave builds.
     """
   
-    compare_attrs = ('name', 'builderNames', 'branch', 'tree'
+    compare_attrs = ('name', 'builderNames', 'branch', 'tree', 'locales',
                      'properties')
   
     def __init__(self, name, tree, branch, builderNames, repourl, locales=None):
