@@ -376,12 +376,13 @@ class DirScheduler(BaseUpstreamScheduler):
     compare_attrs = ('name', 'builderNames', 'branch', 'tree'
                      'properties')
   
-    def __init__(self, name, tree, branch, builderNames, repourl):
+    def __init__(self, name, tree, branch, builderNames, repourl, locales=None):
         BaseUpstreamScheduler.__init__(self, name)
         self.tree = tree
         self.branch = branch
         self.builderNames = builderNames
         self.repourl = repourl
+        self.locales = locales
 
     def getPage(self, url):
         return getPage(url)
@@ -433,10 +434,16 @@ class DirScheduler(BaseUpstreamScheduler):
             else:
                 return
         if change.locale == 'en-US':
-            # trigger all builds, load repo index
-            d = self.getPage(self.repourl + self.branch + '?style=raw')
-            d.addCallback(self.onRepoIndex, change)
-            #d.addErrback(self.failedRepo)
+            if self.locales:
+                # we don't need to trigger a directory index,
+                # we know our locales
+                for loc in self.locales:
+                    self.queueBuild(loc, change)
+            else:
+                # trigger all builds, load repo index
+                d = self.getPage(self.repourl + self.branch + '?style=raw')
+                d.addCallback(self.onRepoIndex, change)
+                #d.addErrback(self.failedRepo)
             return
         self.queueBuild(change.locale, change)
 

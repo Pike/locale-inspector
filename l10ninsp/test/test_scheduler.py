@@ -197,3 +197,22 @@ dir/x-testing
         locs = sorted(map(lambda bset: bset.getProperties()['locale'],
                           self.master.sets))
         self.assertEqual(locs, ['ab', 'fr', 'x-testing'])
+
+class PartialDirScheduler(DirScheduler):
+
+    def addScheduler(self, name, tree, branch, builderNames, repourl):
+        s = scheduler.DirScheduler(name, tree, branch, builderNames, repourl, locales=['ab', 'fr'])
+        s.setServiceParent(self.master)
+        s.getPage = self.getPage
+        self.scheduler = s
+
+    def test_en_US(self):
+        self.setupSimple()
+        c = Change('author', ['some/file.dtd'], 'comment',
+                   branch='dir', properties={'locale': 'en-US'})
+        c.number = 1
+        self.scheduler.addChange(c)
+        self.failUnlessEqual(len(self.master.sets), 2)
+        locs = sorted(map(lambda bset: bset.getProperties()['locale'],
+                          self.master.sets))
+        self.assertEqual(locs, ['ab', 'fr'])
