@@ -6,7 +6,7 @@ import sys, time, os
 from twisted.trial import unittest
 from twisted.internet import reactor, defer
 from twisted.python import util, log
-from l10ninsp.slave import InspectCommand
+from l10ninsp.slave import InspectCommand, InspectDirsCommand
 from buildbot import interfaces
 from buildbot.process.base import BuildRequest
 from buildbot.sourcestamp import SourceStamp
@@ -47,7 +47,40 @@ def createStage(basedir, *files):
         f.close()
 
 
-class SlaveSide(SlaveCommandTestBase, unittest.TestCase):
+class SlaveMixin(SlaveCommandTestBase):
+    def setUp(self):
+        self.setUpBuilder(self.basedir)
+        createStage(self.basedir, *self.stageFiles)
+        #self._db = connection.creation.create_test_db()
+
+    def tearDown(self):
+        #connection.creation.destroy_test_db(self.old_name)
+        pass
+
+    def _check(self, res, expectedRC, expectedDetails, exSummary, exStats={}):
+        self.assertEqual(self.findRC(), expectedRC)
+        res = self._getResults()
+        details = res['details']
+        summary = res['summary']
+        stats = res['stats']
+        if expectedDetails is not None:
+            self.assertEquals(details, dict())
+        for k, v in exSummary.iteritems():
+            self.assertEquals(summary[k], v)
+        self.assertEquals(stats, exStats)
+        return
+
+    def _getResults(self):
+        rv = {'stats':{}}
+        for d in self.builder.updates:
+            if 'result' in d:
+                rv.update(d['result'])
+            if 'stats' in d:
+                rv['stats'] = d['stats']
+        return rv
+
+
+class SlaveSide(SlaveMixin, unittest.TestCase):
     #old_name = settings.DATABASE_NAME
     basedir = "test_compare.testSuccess"
     stageFiles = ((('mozilla', 'app', 'locales', 'l10n.ini'),
@@ -123,14 +156,6 @@ dirs = embedding/android
 <!ENTITY test5 "value5">
 ''')
                   )
-    def setUp(self):
-        self.setUpBuilder(self.basedir)
-        createStage(self.basedir, *self.stageFiles)
-        #self._db = connection.creation.create_test_db()
-
-    def tearDown(self):
-        #connection.creation.destroy_test_db(self.old_name)
-        pass
 
     def args(self, app, locale, gather_stats=False, initial_module=None):
         return {'workdir': '.',
@@ -197,27 +222,38 @@ dirs = embedding/android
                       dict(warnings=1, completion=100, total=3))
         return d
 
-    def _check(self, res, expectedRC, expectedDetails, exSummary, exStats={}):
-        self.assertEqual(self.findRC(), expectedRC)
-        res = self._getResults()
-        details = res['details']
-        summary = res['summary']
-        stats = res['stats']
-        if expectedDetails is not None:
-            self.assertEquals(details, dict())
-        for k, v in exSummary.iteritems():
-            self.assertEquals(summary[k], v)
-        self.assertEquals(stats, exStats)
-        return
 
-    def _getResults(self):
-        rv = {'stats':{}}
-        for d in self.builder.updates:
-            if 'result' in d:
-                rv.update(d['result'])
-            if 'stats' in d:
-                rv['stats'] = d['stats']
-        return rv
+class SlaveSideDirectory(SlaveMixin, unittest.TestCase):
+    #old_name = settings.DATABASE_NAME
+    basedir = "test_compare.testSuccess"
+    stageFiles = ((('dir', 'good', 'app', 'file.properties'),
+        '''
+entry = localized value
+monty = locother value
+'''.encode('utf-8')),
+        (('dir', 'en-US', 'app', 'file.properties'),
+        '''
+entry = English value
+monty = Another English value
+'''.encode('utf-8')))
+
+    def args(self, locale, gather_stats=False, initial_module=None):
+        return {'workdir': 'dir',
+                'refpath': 'en-US',
+                'l10npath': locale,
+                'locale': locale,
+                'tree': 'dir-compare',
+                'gather_stats': gather_stats
+                }
+
+    def testGood(self):
+        args = self.args('good')
+        d = self.startCommand(InspectDirsCommand, args)
+        d.addCallback(self._check,
+                      0,
+                      dict(),
+                      dict(completion=100))
+        return d
 
 
 config = """
