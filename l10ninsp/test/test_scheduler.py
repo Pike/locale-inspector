@@ -216,3 +216,11 @@ class PartialDirScheduler(DirScheduler):
         locs = sorted(map(lambda bset: bset.getProperties()['locale'],
                           self.master.sets))
         self.assertEqual(locs, ['ab', 'fr'])
+
+    def testDE(self):
+        self.setupSimple()
+        c = Change('author', ['some/file.dtd'], 'comment',
+                   branch='dir', properties={'locale': 'de'})
+        c.number = 1
+        self.scheduler.addChange(c)
+        self.failUnlessEqual(len(self.master.sets), 0)

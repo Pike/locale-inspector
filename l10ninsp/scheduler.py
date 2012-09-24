@@ -445,6 +445,8 @@ class DirScheduler(BaseUpstreamScheduler):
                 d.addCallback(self.onRepoIndex, change)
                 #d.addErrback(self.failedRepo)
             return
+        if self.locales and change.locale not in self.locales:
+            return
         self.queueBuild(change.locale, change)
 
 
