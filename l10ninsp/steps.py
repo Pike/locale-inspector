@@ -23,7 +23,7 @@ from cStringIO import StringIO
 
 from bb2mbdb.utils import timeHelper
 
-import logger
+import logger, util
 
 class ResultRemoteCommand(LoggedRemoteCommand):
     """
@@ -495,7 +495,7 @@ class TreeLoader(BuildStep):
 
     def allLocalesLoaded(self, page):
         self.pending -= 1
-        locales = filter(None, page.splitlines())
+        locales = util.parseLocales(page)
         self.build.setProperty('locales', locales,
                                'Build')
         logger.debug('scheduler.l10n.tree',

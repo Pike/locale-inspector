@@ -16,7 +16,7 @@ from datetime import datetime
 import os.path
 from ConfigParser import ConfigParser, NoSectionError, NoOptionError
 
-import logger
+import logger, util
 
 #from bb2mbdb.utils import timeHelper
 def timeHelper(t):
@@ -308,7 +308,7 @@ class AppScheduler(BaseUpstreamScheduler):
                 self.compareBuild(_n, l, [change])
 
     def onAllLocales(self, page, tree, change = None):
-        newlocs = filter(None, page.splitlines())
+        newlocs = util.parseLocales(page)
         added = set(newlocs) - set(self.trees[tree].locales)
         logger.debug('scheduler.l10n.all-locales',
                      "had %s; got %s; new are %s" % 
