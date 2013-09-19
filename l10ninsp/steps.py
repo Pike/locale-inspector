@@ -345,8 +345,8 @@ class GetRevisions(BuildStep):
                                         changesets__branch__name=self.hg_branch)
                 to_set = str(q.order_by('-pk')[0].tip.shortrev)
             except IndexError:
-                # no pushes, update to empty repo 000000000000
-                to_set = "000000000000"
+                # no pushes, update to the requested hg branch
+                to_set = self.hg_branch
             self.build.setProperty('%s_revision' % rev, to_set, 'Build')
             loog.addStdout("%s: %s\n" % (branch, to_set))
         reactor.callLater(0, self.finished, SUCCESS)
