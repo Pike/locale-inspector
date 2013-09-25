@@ -380,10 +380,12 @@ class DirScheduler(BaseUpstreamScheduler):
     compare_attrs = ('name', 'builderNames', 'branch', 'tree', 'locales',
                      'properties')
   
-    def __init__(self, name, tree, branch, builderNames, repourl, locales=None):
+    def __init__(self, name, tree, branch, builderNames, repourl,
+                 locales=None, enBranch=None):
         BaseUpstreamScheduler.__init__(self, name)
         self.tree = tree
         self.branch = branch
+        self.enBranch = enBranch if enBranch else branch
         self.builderNames = builderNames
         self.repourl = repourl
         self.locales = locales
@@ -398,9 +400,9 @@ class DirScheduler(BaseUpstreamScheduler):
                       'tree': self.tree,
                       'branch': self.branch,
                       'repourl': self.repourl,
-                      'refpath': self.branch + '/en-US',
+                      'refpath': self.enBranch + '/en-US',
                       'en_revision': 'default',
-                      'en_branch': self.branch + '/en-US',
+                      'en_branch': self.enBranch + '/en-US',
                       'l10npath': self.branch + '/' + locale,
                       'l10n_revision': 'default',
                       'l10n_branch': self.branch,
@@ -428,7 +430,7 @@ class DirScheduler(BaseUpstreamScheduler):
     def addChange(self, change):
         log.msg("scheduler",
                   "addChange: Change %d, %s" % (change.number, change.asText()))
-        if self.branch != change.branch:
+        if change.branch not in (self.branch, self.enBranch):
             log.msg("not our branch, ignore, %s != %s" %
                     (self.branch, change.branch))
             return
@@ -437,7 +439,7 @@ class DirScheduler(BaseUpstreamScheduler):
                 change.locale = change.properties['locale']
             else:
                 return
-        if change.locale == 'en-US':
+        if change.locale == 'en-US' and change.branch == self.enBranch:
             if self.locales:
                 # we don't need to trigger a directory index,
                 # we know our locales
@@ -445,9 +447,11 @@ class DirScheduler(BaseUpstreamScheduler):
                     self.queueBuild(loc, change)
             else:
                 # trigger all builds, load repo index
-                d = self.getPage(self.repourl + self.branch + '?style=raw')
+                d = self.getPage(str(self.repourl + self.branch + '?style=raw'))
                 d.addCallback(self.onRepoIndex, change)
                 #d.addErrback(self.failedRepo)
+            return
+        if change.branch != self.branch:
             return
         if self.locales and change.locale not in self.locales:
             return
