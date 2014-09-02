@@ -24,6 +24,9 @@ from cStringIO import StringIO
 from bb2mbdb.utils import timeHelper
 
 import logger, util
+import elasticsearch
+
+from django.conf import settings
 
 class ResultRemoteCommand(LoggedRemoteCommand):
     """
@@ -133,6 +136,9 @@ class ResultRemoteCommand(LoggedRemoteCommand):
                            if k in summary])
         self.logs['stdio'].addEntry(5, json.dumps(result, indent=2))
         self.addSummary(summary)
+        es = elasticsearch.Elasticsearch(hosts=settings.ES_COMPARE_HOST)
+        es.index(index=settings.ES_COMPARE_INDEX, body=result,
+                 doc_type='comparison', id=self.dbrun.id)
 
     def addStats(self, stats):
         self.ensureDBRun()
