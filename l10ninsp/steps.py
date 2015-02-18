@@ -137,8 +137,15 @@ class ResultRemoteCommand(LoggedRemoteCommand):
         self.logs['stdio'].addEntry(5, json.dumps(result, indent=2))
         self.addSummary(summary)
         es = elasticsearch.Elasticsearch(hosts=settings.ES_COMPARE_HOST)
-        es.index(index=settings.ES_COMPARE_INDEX, body=result,
-                 doc_type='comparison', id=self.dbrun.id)
+        # create our ES document to index in ES
+        # details from result, and self.dbrun was created in addSummary above
+        body = {
+            'run': self.dbrun.id,
+            'details': result['details']
+        }
+        rv = es.index(index=settings.ES_COMPARE_INDEX, body=body,
+                      doc_type='comparison', id=self.dbrun.id)
+        log.msg('es.index: ' + json.dumps(rv))
 
     def addStats(self, stats):
         self.ensureDBRun()
