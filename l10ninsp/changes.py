@@ -14,7 +14,6 @@ from buildbot.changes import base, changes
 def createChangeSource(settings, pollInterval=3*60):
     os.environ['DJANGO_SETTINGS_MODULE'] = settings
     from life.models import Push, Branch
-    from django.db import transaction
     class MBDBChangeSource(base.ChangeSource):
         debug = True
         def __init__(self,  pollInterval=30, branch='default'):
@@ -33,15 +32,12 @@ def createChangeSource(settings, pollInterval=3*60):
             self.loop.stop()
             return base.ChangeSource.stopService(self)
         
-        @transaction.commit_on_success
         def poll(self):
             '''Check for new pushes.
 
-            Hack around transactions on innodb, make this transaction
-            aware and transaction.commit() to get a new transaction
-            for our queries.
+            Assume we're in autocommit mode and don't need to do
+            anything to get current results
             '''
-            transaction.commit()
             if self.latest is None:
                 try:
                     self.latest = Push.objects.order_by('-pk')[0].id
