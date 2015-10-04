@@ -41,21 +41,26 @@ def createChangeSource(settings, pollInterval=3*60):
             aware and transaction.commit() to get a new transaction
             for our queries.
             '''
-            transaction.commit()
-            if self.latest is None:
-                try:
-                    self.latest = Push.objects.order_by('-pk')[0].id
-                except IndexError:
-                    self.latest = 0
-                return
-            new_pushes = Push.objects.filter(pk__gt=self.latest).order_by('pk')
-            if self.debug:
-                log.msg('mbdb changesource found %d pushes after %d' % (new_pushes.count(), self.latest))
-            push = None
-            for push in new_pushes:
-                self.submitChangesForPush(push)
-            if push is not None:
-                self.latest = push.id
+            try:
+                transaction.commit()
+                if self.latest is None:
+                    try:
+                        self.latest = Push.objects.order_by('-pk')[0].id
+                    except IndexError:
+                        self.latest = 0
+                    return
+                new_pushes = Push.objects.filter(pk__gt=self.latest).order_by('pk')
+                if self.debug:
+                    log.msg('mbdb changesource found %d pushes after %d' % (new_pushes.count(), self.latest))
+                push = None
+                for push in new_pushes:
+                    self.submitChangesForPush(push)
+                if push is not None:
+                    self.latest = push.id
+            except MySQLdb.OperationalError:
+                from django import db
+                db.close_connection()
+                log.msg('Django database OperationalError caught')
 
         def submitChangesForPush(self, push):
             if self.debug:
