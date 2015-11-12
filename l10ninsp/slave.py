@@ -13,8 +13,8 @@ from buildbot.status.builder import SUCCESS, WARNINGS, FAILURE, EXCEPTION
 import codecs
 from collections import defaultdict
 import os
-from Mozilla.Paths import EnumerateSourceTreeApp
-from Mozilla.CompareLocales import compareApp, compareDirs
+from compare_locales.paths import EnumerateSourceTreeApp
+from compare_locales.compare import compareApp, compareDirs
 
 class intdict(defaultdict):
     def __init__(self):
@@ -39,9 +39,9 @@ class InspectCommand(Command):
 
   To be able to run this, you have to
 
-    import Mozilla.slave
+    import l10ninsp.slave
 
-  when starting python on the slave via PYHTONSTARTUP
+  from the slave's buildbot.tac
   """
   
   debug = True
@@ -109,7 +109,7 @@ class InspectCommand(Command):
     stats = None
     if gather_stats:
       obs = Observer()
-    o = compareApp(app, otherObserver=obs)
+    o = compareApp(app, other_observer=obs)
     summary = o.summary[locale]
     if gather_stats:
       stats = obs.dict()
@@ -141,7 +141,7 @@ class InspectDirsCommand(InspectCommand):
     log.msg(workingdir, ref, l10n)
     o = compareDirs(os.path.join(workingdir, ref),
                     os.path.join(workingdir, l10n),
-                    otherObserver = obs)
+                    other_observer = obs)
     try:
         summary = o.summary.values()[0]
     except:
