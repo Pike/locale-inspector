@@ -11,8 +11,7 @@ from twisted.internet.task import LoopingCall
 
 from buildbot.changes import base, changes
 
-def createChangeSource(settings, pollInterval=3*60):
-    os.environ['DJANGO_SETTINGS_MODULE'] = settings
+def createChangeSource(pollInterval=3*60):
     from life.models import Push, Branch
     from django.db import transaction
     class MBDBChangeSource(base.ChangeSource):
@@ -32,17 +31,13 @@ def createChangeSource(settings, pollInterval=3*60):
         def stopService(self):
             self.loop.stop()
             return base.ChangeSource.stopService(self)
-        
-        @transaction.commit_on_success
+
+        @transaction.atomic
         def poll(self):
             '''Check for new pushes.
-
-            Hack around transactions on innodb, make this transaction
-            aware and transaction.commit() to get a new transaction
-            for our queries.
             '''
+            import django.db.utils
             try:
-                transaction.commit()
                 if self.latest is None:
                     try:
                         self.latest = Push.objects.order_by('-pk')[0].id
@@ -57,9 +52,9 @@ def createChangeSource(settings, pollInterval=3*60):
                     self.submitChangesForPush(push)
                 if push is not None:
                     self.latest = push.id
-            except MySQLdb.OperationalError:
+            except django.db.utils.OperationalError:
                 from django import db
-                db.close_connection()
+                django.db.connection.close()
                 log.msg('Django database OperationalError caught')
 
         def submitChangesForPush(self, push):
